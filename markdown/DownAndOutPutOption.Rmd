@@ -32,7 +32,7 @@ In this simulation i set the barrier to be equal to 80 - not too small but small
 This library consists of my own prepared one C++ function for Monte Carlo simulation.
 
 ```{r}
-# install_github("quitTheEssential/europeanoption")
+# install_github("quitTheEssential/europeanoption/europeanoption")
 
 library(EuropeanOption)
 ```
