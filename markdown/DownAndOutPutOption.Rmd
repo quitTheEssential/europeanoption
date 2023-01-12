@@ -1,0 +1,215 @@
+---
+title: "Down-and-out put option"
+author: "Robert Kowalczyk"
+date: "2023-01-12"
+output: html_document
+---
+
+# Declaration
+
+## In accordance with the Honor Code, I certify that my answers here are my own work, and I did not make my solutions available to anyone else.
+
+```{r setup}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(Rcpp)
+library(ggplot2)
+library(devtools)
+library(tidyverse)
+```
+
+***
+
+I am considering a European style down-and-out put option with a barrier level that
+tells us if the pricing of the put option should be zero or any positive value.
+
+In this simulation i set the barrier to be equal to 80 - not too small but small enough to obtain some interesting results.
+
+### Install package and load library
+This library consists of my own prepared one C++ function for Monte Carlo simulation.
+
+```{r}
+# install_github("quitTheEssential/europeanoption")
+
+library(EuropeanOption)
+```
+
+# Build an R wrapping function: option price vs. time to maturity 
+
+# Let's find out the theoretical price for the following values:
+- price of the underyling at the moment of option pricing: S_0 = 95
+- strike price K = 100
+- annualized volatility rate sigma = 0.24
+- annualized risk-free rate r = 0.07
+- time to maturity t = 0.75
+
+```{r}
+EuropeanOption::getArithmeticEuropeanPutPrice(
+  nInt = 126,
+  Strike = 100,
+  Spot = 95,
+  Vol = 0.24,
+  Rfr = 0.07,
+  0.75,
+  Barrier = 80,
+  nReps = 100000
+)
+```
+
+
+```{r}
+getMCEuropeanCallPriceWithExpiry <- function (expiry) {
+  return(
+    EuropeanOption::getArithmeticEuropeanPutPrice(
+      nInt = 126,
+      Strike = 100,
+      Spot = 95,
+      Vol = 0.24,
+      Rfr = 0.07,
+      expiry,
+      Barrier = 80,
+      nReps = 10000
+    )
+  )
+}
+```
+
+# Call the wrapping function 
+
+```{r}
+getMCEuropeanCallPriceWithExpiry(0.5)
+```
+# Arguments values of values of function 
+```{r}
+expiry <- seq(0.01, 1, by = 0.01)
+prices <- sapply(expiry, getMCEuropeanCallPriceWithExpiry)
+```
+
+# Visualization: options price vs. expiry 
+```{r}
+tibble(expiry, prices) %>%
+  ggplot(aes(expiry, prices)) +
+  geom_point(col = "red") +
+  labs(
+    x     = "time to maturity",
+    y     = "option price",
+    title = "price of arithmetic European put option vs. time to maturity",
+    caption = "source: own calculations with the EuropeanOption package"
+  )
+```
+
+The chart above shows us the relationship of option pricing depending on time to maturity. When time to maturity is small (we are close to option expiration) option valuation reaches its highest values, while as time to maturity increases option valuation decreases. This is according to the formula Ke^(-rT), when T goes to infinity then the valuation will go to zero.
+
+# Build an R wrapping function: option price vs. number of loops
+
+
+```{r}
+getMCEuropeanCallPriceWithLoops <- function (loops) {
+  return(
+    EuropeanOption::getArithmeticEuropeanPutPrice(126, 100, 95, 0.24, 0.07, 0.75, 80, loops)
+  )
+}
+```
+
+# Call the wrapping function 
+```{r}
+getMCEuropeanCallPriceWithLoops(500)
+```
+
+
+
+# Arguments values of values of function 
+
+```{r}
+loops  <- seq(100, 10000, by = 100)
+prices <- sapply(loops, getMCEuropeanCallPriceWithLoops)
+```
+
+
+
+# visualization: options price vs. numbers of loops 
+
+```{r}
+tibble(loops, prices) %>%
+  ggplot(aes(loops, prices)) +
+  geom_point(col = "blue") +
+  labs(
+    x     = "number of loops",
+    y     = "option price",
+    title = "price of arithmetic European put option vs. number of loops",
+    caption = "source: own calculations with the EuropeanOption package"
+  )
+```
+
+The chart above shows the behavior of the Law of Large Numbers. In this case, the more times we simulate the behavior of the put option, the closer and closer we get to the true theoretical option price. You can see that the points begin to get closer and closer together and converge to a single value. 
+
+
+# Build an R wrapping function: option price vs. spot and volatility
+```{r}
+getMCEuropeanCallPriceWithSpotAndVol <- function (spot, vol) {
+  return(
+    EuropeanOption::getArithmeticEuropeanPutPrice(126, 100, spot, vol, 0.07, 0.75, 80, 5000)
+  )
+}
+```
+
+
+# Call function once
+```{r}
+getMCEuropeanCallPriceWithSpotAndVol(95, 0.24)
+```
+
+
+# Sequences of argument values
+```{r}
+spot <- seq(90, 105, by = 0.5)
+vol  <- c(0.001, 0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1)
+
+grid      <- expand.grid(spot = spot, vol = vol)
+prices    <- mapply(getMCEuropeanCallPriceWithSpotAndVol,
+                    spot = grid$spot,
+                    vol = grid$vol)
+result.df <- data.frame(grid, prices)
+head(result.df)
+```
+
+
+
+# Visualization: options price vs. spot price and volatility
+```{r}
+grid %>%
+  as_tibble() %>%
+  bind_cols(price = prices) %>%
+  ggplot(aes(
+    x = spot,
+    y = price,
+    group = vol,
+    colour = vol
+  )) +
+  geom_line() +
+  geom_point(size = 1,
+             shape = 21,
+             fill = "white") +
+  geom_label(
+    aes(label = vol),
+    data = grid %>%
+      as_tibble() %>%
+      bind_cols(price = prices) %>%  filter(spot == 95),
+    nudge_x = 0.35,
+    size = 2
+  ) +
+  labs(
+    x     = "spot price",
+    y     = "option price",
+    title = "price of arithmetic European put option vs. spot price and volatility",
+    caption = "source: own calculations with the EuropeanOption package"
+  )
+```
+
+In the last chart, we see the dependence of the valuation of the put option on the current market price of the financial instrument on which the option is written and price volatility. The higher the price volatility over time, the higher the probability that our option will exceed the barrier. The smoothest graph is for volatility equal to 5% and 10%. 
+
+
+***
